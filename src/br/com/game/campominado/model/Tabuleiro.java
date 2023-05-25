@@ -1,18 +1,18 @@
 package br.com.game.campominado.model;
 
-import br.com.game.campominado.exception.ExplosaoException;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-public class Tabuleiro {
+public class Tabuleiro implements CampoObservador{
 
     private int linhas;
     private int colunas;
     private int minas;
 
     private final List<Campo> campos = new ArrayList<>();
+    private final List<Consumer<Boolean>> observadores = new ArrayList<>();
 
     public Tabuleiro(int linhas, int colunas, int minas) {
         this.linhas = linhas;
@@ -24,16 +24,25 @@ public class Tabuleiro {
         sortearMinas();
     }
 
-    public void abrir(int linha, int coluna) {
-        try {
-            campos.parallelStream()
-                    .filter(c -> c.getLinha() == linha && c.getColuna() == coluna)
-                    .findFirst().ifPresent(c -> c.abrir());
-        } catch (ExplosaoException e) {
-            campos.forEach(c -> c.setAberto(true));
+    public void registrarObservador(Consumer<Boolean> observador) {
+        observadores.add(observador);
+    }
 
-            throw e;
-        }
+    private void notificarObservadores(boolean resultado) {
+        observadores.stream().forEach(observador -> observador.accept(resultado));
+    }
+
+    public void abrir(int linha, int coluna) {
+
+        campos.parallelStream()
+                .filter(c -> c.getLinha() == linha && c.getColuna() == coluna)
+                .findFirst().ifPresent(c -> c.abrir());
+
+    }
+
+    private void mostrarMinas() {
+        campos.stream().filter(c -> c.isMinado())
+                .forEach(c -> c.setAberto(true));
     }
 
     public void marcar(int linha, int coluna) {
@@ -45,7 +54,9 @@ public class Tabuleiro {
     private void gerarCampos() {
         for (int i = 0; i < linhas; i++) {
             for (int j = 0; j < colunas; j++) {
-                campos.add(new Campo(i ,j ));
+                Campo campo = new Campo(i, j);
+                campo.registrarObservador(this);
+                campos.add(campo);
             }
         }
     }
@@ -78,41 +89,14 @@ public class Tabuleiro {
         sortearMinas();
     }
 
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("   ");
-        for (int c = 0; c < colunas; c++) {
-            sb.append(" ");
-            sb.append(c);
-            sb.append(" ");
+    @Override
+    public void eventoOcorreu(Campo campo, CampoEvento evento) {
+        if(evento == CampoEvento.EXPLODIR) {
+            mostrarMinas();
+            notificarObservadores(false);
+        } else if (objectivoAlcancado()) {
+            System.out.println("Ganhou!");
+            notificarObservadores(true);
         }
-
-        sb.append("\n");
-
-        sb.append("   ");
-        for (int c = 0; c < colunas; c++) {
-            sb.append(" ");
-            sb.append("_");
-            sb.append(" ");
-        }
-
-        sb.append("\n");
-
-        int aux = 0;
-        for (int i = 0; i < linhas; i++) {
-            sb.append(i);
-            sb.append("");
-            sb.append(" |");
-            for (int j = 0; j < colunas; j++) {
-                sb.append(" ");
-                sb.append(campos.get(aux));
-                sb.append(" ");
-                aux++;
-            }
-            sb.append("\n");
-        }
-
-        return sb.toString();
     }
 }
